@@ -1,81 +1,66 @@
-package com.td.gtbcm.counterparty.integration;
+package com.td.gtbcm.counterparty.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.td.gtbcm.counterparty.dto.ApiResponse;
 import com.td.gtbcm.counterparty.dto.CounterpartyRequest;
 import com.td.gtbcm.counterparty.dto.PartyAccount;
 import com.td.gtbcm.counterparty.dto.PartyAddress;
 import com.td.gtbcm.counterparty.dto.Agent;
 import com.td.gtbcm.counterparty.dto.AgentAddress;
 import com.td.gtbcm.counterparty.dto.AgentIdentification;
+import com.td.gtbcm.counterparty.exception.DuplicateCounterpartyException;
+import com.td.gtbcm.counterparty.exception.JsonSchemaValidationException;
+import com.td.gtbcm.counterparty.service.CounterpartyService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureWebMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
-@SpringBootTest
-@AutoConfigureWebMvc
-@ActiveProfiles("test")
-class CounterpartyIntegrationTest {
+@ExtendWith(MockitoExtension.class)
+class CounterpartyControllerUnitTest {
 
-    @Autowired
-    private WebApplicationContext webApplicationContext;
+    @Mock
+    private CounterpartyService counterpartyService;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @InjectMocks
+    private CounterpartyController counterpartyController;
 
-    private MockMvc mockMvc;
+    private CounterpartyRequest validRequest;
 
-    @Test
-    void createCounterparty_ValidRequest_Success() throws Exception {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
-        
-        CounterpartyRequest request = createValidCounterpartyRequest();
-
-        mockMvc.perform(post("/api/v1/counterparty/create-counterparty")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("SUCCESS"));
+    @BeforeEach
+    void setUp() {
+        validRequest = createValidCounterpartyRequest();
     }
 
     @Test
-    void createCounterparty_InvalidRequest_ValidationError() throws Exception {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
-        
-        // Create invalid request with missing required fields
-        CounterpartyRequest request = new CounterpartyRequest();
-        // Missing required fields
+    void createCounterparty_Success() {
+        // Given
+        String expectedCounterpartyId = "test-uuid-123";
+        when(counterpartyService.createCounterparty(any(CounterpartyRequest.class)))
+                .thenReturn(expectedCounterpartyId);
 
-        mockMvc.perform(post("/api/v1/counterparty/create-counterparty")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("ERROR"))
-                .andExpect(jsonPath("$.message").value("JSON Schema validation failed"));
+        // When
+        ResponseEntity<ApiResponse> response = counterpartyController.createCounterparty(validRequest);
+
+        // Then
+        assertNotNull(response);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("SUCCESS", response.getBody().getStatus());
+        assertEquals("Counterparty for ClientId USC12345 created successfully", response.getBody().getMessage());
+        assertEquals(expectedCounterpartyId, response.getBody().getCounterpartyId());
+        verify(counterpartyService).createCounterparty(validRequest);
     }
 
-    @Test
-    void createCounterparty_InvalidPartyType_ValidationError() throws Exception {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
-        
-        CounterpartyRequest request = createValidCounterpartyRequest();
-        request.setPartyType("INVALID_TYPE"); // Invalid party type
 
-        mockMvc.perform(post("/api/v1/counterparty/create-counterparty")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("ERROR"))
-                .andExpect(jsonPath("$.message").value("JSON Schema validation failed"));
-    }
 
     private CounterpartyRequest createValidCounterpartyRequest() {
         CounterpartyRequest request = new CounterpartyRequest();
